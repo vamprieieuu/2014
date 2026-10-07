@@ -1,0 +1,4 @@
+User-supplied reference images remain subject to their original ownership/usage rights.
+Adobe After Effects SDK is not included.
+Apple, iPhone and related marks belong to Apple.
+This project is an independent implementation and is not affiliated with Apple, FilmConvert, Dehancer, or Instagram.

@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "main": ["amount", "size", "density", "scale", "softness", "speed", "animation", "chroma", "seed"],
+  "tonal": ["shadows", "midtones", "highlights"],
+  "structure": ["fine_size", "coarse_size", "clustering", "spatial_correlation", "pattern_amount", "pattern_scale", "temporal_coherence"],
+  "sensor_model": ["shot_noise", "read_noise", "chroma_noise", "prnu_like", "row_column_variation", "denoise_interaction", "sharpening_interaction"],
+  "color_modes": ["monochrome", "neutral_luma", "warm_chroma", "cool_chroma", "full_chroma", "camera_profile"],
+  "render_modes": ["accurate", "preview", "draft"]
+}

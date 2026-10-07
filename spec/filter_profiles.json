@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "filter_type": "original_2014_inspired_city_presets",
+  "reference_preset": {
+    "name": "Nostalgic Nights Reference",
+    "source_file": "reference/2014_looks/IMG_3448.JPG",
+    "values": {
+      "exposure": -59,
+      "brilliance": 9,
+      "highlights": 100,
+      "shadows": -17,
+      "contrast": 18,
+      "brightness": 100,
+      "black_point": 35,
+      "saturation": 26,
+      "vibrance": -57,
+      "warmth": -100,
+      "tint": -30,
+      "sharpness": 10,
+      "definition": 100,
+      "vignette": 30
+    }
+  },
+  "filters": [
+    {"name":"New York","family":"night_flash_purple"},
+    {"name":"Miami","family":"warm_cyan_magenta"},
+    {"name":"Los Angeles","family":"sunset_warm_purple"},
+    {"name":"Tokyo","family":"violet_digital"},
+    {"name":"Paris","family":"soft_pastel"},
+    {"name":"London","family":"dark_muted_cool"},
+    {"name":"Seattle","family":"cool_green_dim"},
+    {"name":"Berlin","family":"cool_hard_desaturated"},
+    {"name":"Miami Night","family":"night_chroma_split"}
+  ],
+  "editable_controls": ["exposure","brightness","contrast","temperature","tint","saturation","vibrance","highlights","shadows","whites","blacks","master_curve","rgb_curves","levels","shadow_color","midtone_color","highlight_color","fade","highlight_rolloff","microcontrast","softness","vignette","grain_amount","grain_size","grain_chroma"]
+}
