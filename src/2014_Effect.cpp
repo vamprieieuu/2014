@@ -1,5 +1,9 @@
 #if defined(Y2014_HAS_AE_SDK)
 
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS 1
+#endif
+
 #include "AEConfig.h"
 #include "entry.h"
 #include "AE_Effect.h"
@@ -9,8 +13,6 @@
 #include "AE_EffectCBSuites.h"
 #include "String_Utils.h"
 #include "AE_GeneralPlug.h"
-#include "AEFX_SuiteHelper.h"
-#include "Smart_Utils.h"
 
 #include "2014_Plugin.h"
 #include "pipeline_core.h"
@@ -19,12 +21,26 @@
 #include <cmath>
 #include <algorithm>
 
+static inline void UnionRectSafe(const PF_LRect* src, PF_LRect* dst) noexcept {
+    if (!src || !dst) return;
+    if (dst->left == 0 && dst->top == 0 && dst->right == 0 && dst->bottom == 0) {
+        *dst = *src;
+        return;
+    }
+    dst->left   = std::min(dst->left, src->left);
+    dst->top    = std::min(dst->top, src->top);
+    dst->right  = std::max(dst->right, src->right);
+    dst->bottom = std::max(dst->bottom, src->bottom);
+}
+
 static PF_Err About(
     PF_InData* in_data,
     PF_OutData* out_data,
     PF_ParamDef* params[],
     PF_LayerDef* output)
 {
+    (void)params;
+    (void)output;
     if (in_data && out_data && in_data->utils && in_data->utils->ansi.sprintf) {
         in_data->utils->ansi.sprintf(
             out_data->return_msg,
@@ -42,6 +58,9 @@ static PF_Err GlobalSetup(
     PF_ParamDef* params[],
     PF_LayerDef* output)
 {
+    (void)in_data;
+    (void)params;
+    (void)output;
     if (!out_data) {
         return PF_Err_INVALID_INDEX;
     }
@@ -53,8 +72,6 @@ static PF_Err GlobalSetup(
         Y2014_STAGE_VERSION,
         Y2014_BUILD_VERSION);
 
-    // 0x06000014 -> PF_OutFlag_NON_PARAM_VARY (0x04) | PF_OutFlag_SEND_UPDATE_PARAMS_UI (0x10) |
-    //               PF_OutFlag_DEEP_COLOR_AWARE (0x02000000) | PF_OutFlag_I_DO_DIALOG (0x00)
     out_data->out_flags =
         PF_OutFlag_DEEP_COLOR_AWARE |
         PF_OutFlag_NON_PARAM_VARY |
@@ -68,7 +85,7 @@ static PF_Err GlobalSetup(
     return PF_Err_NONE;
 }
 
-static void AddSlider(
+static PF_Err AddSlider(
     const char* name,
     PF_FpShort validMin,
     PF_FpShort validMax,
@@ -94,6 +111,7 @@ static void AddSlider(
         PF_ValueDisplayFlag_NONE,
         flags,
         diskId);
+    return PF_Err_NONE;
 }
 
 static PF_Err ParamsSetup(
@@ -102,6 +120,9 @@ static PF_Err ParamsSetup(
     PF_ParamDef* params[],
     PF_LayerDef* output)
 {
+    (void)params;
+    (void)output;
+    PF_Err err = PF_Err_NONE;
     PF_ParamDef def;
 
     // ===================== CAMERA MODEL GROUP =====================
@@ -117,23 +138,23 @@ static PF_Err ParamsSetup(
         "iPhone 5|iPhone 5s|iPhone 6|iPhone 6s|iPhone 7|iPhone 7 Plus|iPhone 8|iPhone 8 Plus",
         PARAM_CAMERA_MODEL);
 
-    AddSlider("Profile Strength", 0.0f, 100.0f, 0.0f, 100.0f, 85.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_STRENGTH, in_data);
-    AddSlider("Camera Exposure", -2.0f, 2.0f, -2.0f, 2.0f, 0.0f, 2, PF_ParamFlag_NONE, PARAM_CAMERA_EXPOSURE, in_data);
-    AddSlider("Camera Brightness", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_BRIGHTNESS, in_data);
-    AddSlider("Camera Contrast", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_CONTRAST, in_data);
-    AddSlider("Camera Saturation", -100.0f, 100.0f, -100.0f, 100.0f, 10.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_SATURATION, in_data);
-    AddSlider("Camera Temperature", -100.0f, 100.0f, -100.0f, 100.0f, 20.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_TEMPERATURE, in_data);
-    AddSlider("Camera Tint", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_TINT, in_data);
-    AddSlider("Camera Highlights", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_HIGHLIGHTS, in_data);
-    AddSlider("Camera Shadows", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_SHADOWS, in_data);
-    AddSlider("Camera Whites", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_WHITES, in_data);
-    AddSlider("Camera Blacks", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_BLACKS, in_data);
-    AddSlider("HDR Character", 0.0f, 100.0f, 0.0f, 100.0f, 68.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_HDR_CHARACTER, in_data);
-    AddSlider("Low-Light Noise Reduction", 0.0f, 100.0f, 0.0f, 100.0f, 58.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_LOWLIGHT_NR, in_data);
-    AddSlider("ISP Edge Sharpening", 0.0f, 120.0f, 0.0f, 120.0f, 62.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_SHARPENING, in_data);
-    AddSlider("Corner Lens Softness", 0.0f, 100.0f, 0.0f, 100.0f, 14.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_LENS_SOFTNESS, in_data);
-    AddSlider("Chromatic Aberration", 0.0f, 100.0f, 0.0f, 100.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_CHROMATIC_ABERRATION, in_data);
-    AddSlider("Camera Vignette", 0.0f, 100.0f, 0.0f, 100.0f, 19.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_VIGNETTE, in_data);
+    ERR(AddSlider("Profile Strength", 0.0f, 100.0f, 0.0f, 100.0f, 85.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_STRENGTH, in_data));
+    ERR(AddSlider("Camera Exposure", -2.0f, 2.0f, -2.0f, 2.0f, 0.0f, 2, PF_ParamFlag_NONE, PARAM_CAMERA_EXPOSURE, in_data));
+    ERR(AddSlider("Camera Brightness", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_BRIGHTNESS, in_data));
+    ERR(AddSlider("Camera Contrast", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_CONTRAST, in_data));
+    ERR(AddSlider("Camera Saturation", -100.0f, 100.0f, -100.0f, 100.0f, 10.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_SATURATION, in_data));
+    ERR(AddSlider("Camera Temperature", -100.0f, 100.0f, -100.0f, 100.0f, 20.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_TEMPERATURE, in_data));
+    ERR(AddSlider("Camera Tint", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_TINT, in_data));
+    ERR(AddSlider("Camera Highlights", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_HIGHLIGHTS, in_data));
+    ERR(AddSlider("Camera Shadows", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_SHADOWS, in_data));
+    ERR(AddSlider("Camera Whites", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_WHITES, in_data));
+    ERR(AddSlider("Camera Blacks", -100.0f, 100.0f, -100.0f, 100.0f, 0.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_BLACKS, in_data));
+    ERR(AddSlider("HDR Character", 0.0f, 100.0f, 0.0f, 100.0f, 68.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_HDR_CHARACTER, in_data));
+    ERR(AddSlider("Low-Light Noise Reduction", 0.0f, 100.0f, 0.0f, 100.0f, 58.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_LOWLIGHT_NR, in_data));
+    ERR(AddSlider("ISP Edge Sharpening", 0.0f, 120.0f, 0.0f, 120.0f, 62.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_SHARPENING, in_data));
+    ERR(AddSlider("Corner Lens Softness", 0.0f, 100.0f, 0.0f, 100.0f, 14.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_LENS_SOFTNESS, in_data));
+    ERR(AddSlider("Chromatic Aberration", 0.0f, 100.0f, 0.0f, 100.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_CHROMATIC_ABERRATION, in_data));
+    ERR(AddSlider("Camera Vignette", 0.0f, 100.0f, 0.0f, 100.0f, 19.0f, 1, PF_ParamFlag_NONE, PARAM_CAMERA_VIGNETTE, in_data));
 
     AEFX_CLR_STRUCT(def);
     PF_END_TOPIC(PARAM_CAMERA_TOPIC_END);
@@ -151,24 +172,24 @@ static PF_Err ParamsSetup(
         "Bypass (None)|New York|Miami|Los Angeles|Tokyo|Paris|London|Seattle|Berlin|Miami Night|Nostalgic Nights Reference",
         PARAM_FILTER_PRESET);
 
-    AddSlider("Filter Strength", 0.0f, 100.0f, 0.0f, 100.0f, 85.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_STRENGTH, in_data);
-    AddSlider("Exposure", -100.0f, 100.0f, -100.0f, 100.0f, -24.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_EXPOSURE, in_data);
-    AddSlider("Brilliance", -100.0f, 100.0f, -100.0f, 100.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_BRILLIANCE, in_data);
-    AddSlider("Brightness", -100.0f, 100.0f, -100.0f, 100.0f, 28.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_BRIGHTNESS, in_data);
-    AddSlider("Contrast", -100.0f, 100.0f, -100.0f, 100.0f, 24.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_CONTRAST, in_data);
-    AddSlider("Temperature", -100.0f, 100.0f, -100.0f, 100.0f, -38.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_TEMPERATURE, in_data);
-    AddSlider("Tint", -100.0f, 100.0f, -100.0f, 100.0f, -22.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_TINT, in_data);
-    AddSlider("Saturation", -100.0f, 100.0f, -100.0f, 100.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_SATURATION, in_data);
-    AddSlider("Vibrance", -100.0f, 100.0f, -100.0f, 100.0f, -28.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_VIBRANCE, in_data);
-    AddSlider("Highlights", -100.0f, 100.0f, -100.0f, 100.0f, 45.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_HIGHLIGHTS, in_data);
-    AddSlider("Shadows", -100.0f, 100.0f, -100.0f, 100.0f, -22.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_SHADOWS, in_data);
-    AddSlider("Whites", -100.0f, 100.0f, -100.0f, 100.0f, 18.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_WHITES, in_data);
-    AddSlider("Blacks", -100.0f, 100.0f, -100.0f, 100.0f, 22.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_BLACKS, in_data);
-    AddSlider("Fade", 0.0f, 100.0f, 0.0f, 100.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_FADE, in_data);
-    AddSlider("Highlight Roll-Off", 0.0f, 100.0f, 0.0f, 100.0f, 25.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_HIGHLIGHT_ROLLOFF, in_data);
-    AddSlider("Microcontrast", -100.0f, 100.0f, -100.0f, 100.0f, 48.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_MICROCONTRAST, in_data);
-    AddSlider("Softness", 0.0f, 100.0f, 0.0f, 100.0f, 6.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_SOFTNESS, in_data);
-    AddSlider("Vignette", 0.0f, 100.0f, 0.0f, 100.0f, 34.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_VIGNETTE, in_data);
+    ERR(AddSlider("Filter Strength", 0.0f, 100.0f, 0.0f, 100.0f, 85.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_STRENGTH, in_data));
+    ERR(AddSlider("Exposure", -100.0f, 100.0f, -100.0f, 100.0f, -24.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_EXPOSURE, in_data));
+    ERR(AddSlider("Brilliance", -100.0f, 100.0f, -100.0f, 100.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_BRILLIANCE, in_data));
+    ERR(AddSlider("Brightness", -100.0f, 100.0f, -100.0f, 100.0f, 28.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_BRIGHTNESS, in_data));
+    ERR(AddSlider("Contrast", -100.0f, 100.0f, -100.0f, 100.0f, 24.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_CONTRAST, in_data));
+    ERR(AddSlider("Temperature", -100.0f, 100.0f, -100.0f, 100.0f, -38.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_TEMPERATURE, in_data));
+    ERR(AddSlider("Tint", -100.0f, 100.0f, -100.0f, 100.0f, -22.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_TINT, in_data));
+    ERR(AddSlider("Saturation", -100.0f, 100.0f, -100.0f, 100.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_SATURATION, in_data));
+    ERR(AddSlider("Vibrance", -100.0f, 100.0f, -100.0f, 100.0f, -28.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_VIBRANCE, in_data));
+    ERR(AddSlider("Highlights", -100.0f, 100.0f, -100.0f, 100.0f, 45.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_HIGHLIGHTS, in_data));
+    ERR(AddSlider("Shadows", -100.0f, 100.0f, -100.0f, 100.0f, -22.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_SHADOWS, in_data));
+    ERR(AddSlider("Whites", -100.0f, 100.0f, -100.0f, 100.0f, 18.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_WHITES, in_data));
+    ERR(AddSlider("Blacks", -100.0f, 100.0f, -100.0f, 100.0f, 22.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_BLACKS, in_data));
+    ERR(AddSlider("Fade", 0.0f, 100.0f, 0.0f, 100.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_FADE, in_data));
+    ERR(AddSlider("Highlight Roll-Off", 0.0f, 100.0f, 0.0f, 100.0f, 25.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_HIGHLIGHT_ROLLOFF, in_data));
+    ERR(AddSlider("Microcontrast", -100.0f, 100.0f, -100.0f, 100.0f, 48.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_MICROCONTRAST, in_data));
+    ERR(AddSlider("Softness", 0.0f, 100.0f, 0.0f, 100.0f, 6.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_SOFTNESS, in_data));
+    ERR(AddSlider("Vignette", 0.0f, 100.0f, 0.0f, 100.0f, 34.0f, 1, PF_ParamFlag_NONE, PARAM_FILTER_VIGNETTE, in_data));
 
     AEFX_CLR_STRUCT(def);
     PF_END_TOPIC(PARAM_FILTER_TOPIC_END);
@@ -193,35 +214,34 @@ static PF_Err ParamsSetup(
         "Accurate|Preview|Draft",
         PARAM_GRAIN_RENDER_MODE);
 
-    AddSlider("Amount", 0.0f, 100.0f, 0.0f, 100.0f, 42.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_AMOUNT, in_data);
-    AddSlider("Size", 0.5f, 3.0f, 0.5f, 3.0f, 1.25f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_SIZE, in_data);
-    AddSlider("Density", 0.1f, 2.0f, 0.1f, 2.0f, 1.10f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_DENSITY, in_data);
-    AddSlider("Scale / Zoom", 0.5f, 2.5f, 0.5f, 2.5f, 1.00f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_SCALE, in_data);
-    AddSlider("Softness", 0.0f, 100.0f, 0.0f, 100.0f, 28.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SOFTNESS, in_data);
-    AddSlider("Speed", 0.0f, 3.0f, 0.0f, 3.0f, 1.00f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_SPEED, in_data);
-    AddSlider("Animation", 0.0f, 100.0f, 0.0f, 100.0f, 85.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_ANIMATION, in_data);
-    AddSlider("Color / Chroma", 0.0f, 100.0f, 0.0f, 100.0f, 48.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_CHROMA, in_data);
-    AddSlider("Seed", 0.0f, 99999.0f, 0.0f, 9999.0f, 2014.0f, 0, PF_ParamFlag_NONE, PARAM_GRAIN_SEED, in_data);
+    ERR(AddSlider("Amount", 0.0f, 100.0f, 0.0f, 100.0f, 42.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_AMOUNT, in_data));
+    ERR(AddSlider("Size", 0.5f, 3.0f, 0.5f, 3.0f, 1.25f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_SIZE, in_data));
+    ERR(AddSlider("Density", 0.1f, 2.0f, 0.1f, 2.0f, 1.10f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_DENSITY, in_data));
+    ERR(AddSlider("Scale / Zoom", 0.5f, 2.5f, 0.5f, 2.5f, 1.00f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_SCALE, in_data));
+    ERR(AddSlider("Softness", 0.0f, 100.0f, 0.0f, 100.0f, 28.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SOFTNESS, in_data));
+    ERR(AddSlider("Speed", 0.0f, 3.0f, 0.0f, 3.0f, 1.00f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_SPEED, in_data));
+    ERR(AddSlider("Animation", 0.0f, 100.0f, 0.0f, 100.0f, 85.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_ANIMATION, in_data));
+    ERR(AddSlider("Color / Chroma", 0.0f, 100.0f, 0.0f, 100.0f, 48.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_CHROMA, in_data));
+    ERR(AddSlider("Seed", 0.0f, 99999.0f, 0.0f, 9999.0f, 2014.0f, 0, PF_ParamFlag_NONE, PARAM_GRAIN_SEED, in_data));
 
-    // Advanced Grain Topic
     AEFX_CLR_STRUCT(def);
     PF_ADD_TOPIC("Advanced Grain Controls", PARAM_GRAIN_ADV_TOPIC_START);
 
-    AddSlider("Shadows", 0.0f, 200.0f, 0.0f, 200.0f, 135.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SHADOWS, in_data);
-    AddSlider("Midtones", 0.0f, 200.0f, 0.0f, 200.0f, 95.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_MIDTONES, in_data);
-    AddSlider("Highlights", 0.0f, 200.0f, 0.0f, 200.0f, 35.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_HIGHLIGHTS, in_data);
-    AddSlider("Fine", 0.0f, 200.0f, 0.0f, 200.0f, 110.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_FINE, in_data);
-    AddSlider("Coarse", 0.0f, 200.0f, 0.0f, 200.0f, 55.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_COARSE, in_data);
-    AddSlider("Luma", 0.0f, 200.0f, 0.0f, 200.0f, 100.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_LUMA, in_data);
-    AddSlider("Clustering", 0.0f, 100.0f, 0.0f, 100.0f, 42.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_CLUSTERING, in_data);
-    AddSlider("Spatial Correlation", 0.0f, 100.0f, 0.0f, 100.0f, 52.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SPATIAL_CORR, in_data);
-    AddSlider("Temporal Coherence", 0.0f, 100.0f, 0.0f, 100.0f, 65.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_TEMPORAL_COHERENCE, in_data);
-    AddSlider("Pattern Amount", 0.0f, 50.0f, 0.0f, 50.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_PATTERN_AMOUNT, in_data);
-    AddSlider("Pattern Scale", 0.5f, 4.0f, 0.5f, 4.0f, 1.40f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_PATTERN_SCALE, in_data);
-    AddSlider("Shot Noise", 0.0f, 100.0f, 0.0f, 100.0f, 45.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SHOT_NOISE, in_data);
-    AddSlider("Read Noise", 0.0f, 100.0f, 0.0f, 100.0f, 62.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_READ_NOISE, in_data);
-    AddSlider("Denoise Interaction", 0.0f, 100.0f, 0.0f, 100.0f, 45.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_DENOISE_INTERACTION, in_data);
-    AddSlider("Sharpening Interaction", 0.0f, 100.0f, 0.0f, 100.0f, 50.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SHARPEN_INTERACTION, in_data);
+    ERR(AddSlider("Shadows", 0.0f, 200.0f, 0.0f, 200.0f, 135.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SHADOWS, in_data));
+    ERR(AddSlider("Midtones", 0.0f, 200.0f, 0.0f, 200.0f, 95.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_MIDTONES, in_data));
+    ERR(AddSlider("Highlights", 0.0f, 200.0f, 0.0f, 200.0f, 35.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_HIGHLIGHTS, in_data));
+    ERR(AddSlider("Fine", 0.0f, 200.0f, 0.0f, 200.0f, 110.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_FINE, in_data));
+    ERR(AddSlider("Coarse", 0.0f, 200.0f, 0.0f, 200.0f, 55.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_COARSE, in_data));
+    ERR(AddSlider("Luma", 0.0f, 200.0f, 0.0f, 200.0f, 100.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_LUMA, in_data));
+    ERR(AddSlider("Clustering", 0.0f, 100.0f, 0.0f, 100.0f, 42.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_CLUSTERING, in_data));
+    ERR(AddSlider("Spatial Correlation", 0.0f, 100.0f, 0.0f, 100.0f, 52.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SPATIAL_CORR, in_data));
+    ERR(AddSlider("Temporal Coherence", 0.0f, 100.0f, 0.0f, 100.0f, 65.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_TEMPORAL_COHERENCE, in_data));
+    ERR(AddSlider("Pattern Amount", 0.0f, 50.0f, 0.0f, 50.0f, 12.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_PATTERN_AMOUNT, in_data));
+    ERR(AddSlider("Pattern Scale", 0.5f, 4.0f, 0.5f, 4.0f, 1.40f, 2, PF_ParamFlag_NONE, PARAM_GRAIN_PATTERN_SCALE, in_data));
+    ERR(AddSlider("Shot Noise", 0.0f, 100.0f, 0.0f, 100.0f, 45.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SHOT_NOISE, in_data));
+    ERR(AddSlider("Read Noise", 0.0f, 100.0f, 0.0f, 100.0f, 62.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_READ_NOISE, in_data));
+    ERR(AddSlider("Denoise Interaction", 0.0f, 100.0f, 0.0f, 100.0f, 45.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_DENOISE_INTERACTION, in_data));
+    ERR(AddSlider("Sharpening Interaction", 0.0f, 100.0f, 0.0f, 100.0f, 50.0f, 1, PF_ParamFlag_NONE, PARAM_GRAIN_SHARPEN_INTERACTION, in_data));
 
     AEFX_CLR_STRUCT(def);
     PF_END_TOPIC(PARAM_GRAIN_ADV_TOPIC_END);
@@ -230,7 +250,7 @@ static PF_Err ParamsSetup(
     PF_END_TOPIC(PARAM_GRAIN_TOPIC_END);
 
     out_data->num_params = PARAM_COUNT;
-    return PF_Err_NONE;
+    return err;
 }
 
 static PF_Err UserChangedParam(
@@ -240,6 +260,9 @@ static PF_Err UserChangedParam(
     PF_LayerDef* output,
     const PF_UserChangedParamExtra* which_hitP)
 {
+    (void)in_data;
+    (void)out_data;
+    (void)output;
     if (!which_hitP || !params) {
         return PF_Err_NONE;
     }
@@ -410,9 +433,18 @@ static PF_Err RenderLayerWorlds(
     }
 
     PF_PixelFormat format = PF_PixelFormat_ARGB32;
-    AEFX_SuiteScoper<PF_WorldSuite2> wsP(in_data, kPFWorldSuite, kPFWorldSuiteVersion2, nullptr);
-    if (wsP.get()) {
-        wsP->PF_GetPixelFormat(output_worldP, &format);
+    if (in_data && in_data->pica_basicP) {
+        const PF_WorldSuite2* wsP = nullptr;
+        if (in_data->pica_basicP->AcquireSuite(
+                kPFWorldSuite,
+                kPFWorldSuiteVersion2,
+                reinterpret_cast<const void**>(&wsP)) == kSPNoError && wsP)
+        {
+            wsP->PF_GetPixelFormat(output_worldP, &format);
+            in_data->pica_basicP->ReleaseSuite(kPFWorldSuite, kPFWorldSuiteVersion2);
+        } else if (PF_WORLD_IS_DEEP(output_worldP)) {
+            format = PF_PixelFormat_ARGB64;
+        }
     } else if (PF_WORLD_IS_DEEP(output_worldP)) {
         format = PF_PixelFormat_ARGB64;
     }
@@ -465,6 +497,7 @@ static PF_Err Render(
     PF_ParamDef* params[],
     PF_LayerDef* output)
 {
+    (void)out_data;
     if (!in_data || !params || !params[PARAM_INPUT] || !output) {
         return PF_Err_INTERNAL_STRUCT_DAMAGED;
     }
@@ -478,7 +511,8 @@ static PF_Err PreRender(
     PF_OutData* out_data,
     PF_PreRenderExtra* extra)
 {
-    if (!in_data || !extra || !extra->input || !extra->output) {
+    (void)out_data;
+    if (!in_data || !extra || !extra->input || !extra->output || !extra->cb) {
         return PF_Err_INTERNAL_STRUCT_DAMAGED;
     }
 
@@ -497,8 +531,8 @@ static PF_Err PreRender(
         &in_result);
 
     if (!err) {
-        UnionLRect(&in_result.result_rect, &extra->output->result_rect);
-        UnionLRect(&in_result.max_result_rect, &extra->output->max_result_rect);
+        UnionRectSafe(&in_result.result_rect, &extra->output->result_rect);
+        UnionRectSafe(&in_result.max_result_rect, &extra->output->max_result_rect);
     }
     return err;
 }
@@ -508,6 +542,7 @@ static PF_Err SmartRender(
     PF_OutData* out_data,
     PF_SmartRenderExtra* extra)
 {
+    (void)out_data;
     if (!in_data || !extra || !extra->cb) {
         return PF_Err_INTERNAL_STRUCT_DAMAGED;
     }
@@ -528,25 +563,29 @@ static PF_Err SmartRender(
             AEFX_CLR_STRUCT(checkedOutParams[i]);
         }
 
-        for (int i = 1; i < PARAM_COUNT; ++i) {
-            if (PF_checkout_param(
-                    in_data,
-                    i,
-                    in_data->current_time,
-                    in_data->time_step,
-                    in_data->time_scale,
-                    &checkedOutParams[i]) == PF_Err_NONE)
-            {
-                paramPtrs[i] = &checkedOutParams[i];
+        if (in_data->inter.checkout_param) {
+            for (int i = 1; i < PARAM_COUNT; ++i) {
+                if (in_data->inter.checkout_param(
+                        in_data->effect_ref,
+                        i,
+                        in_data->current_time,
+                        in_data->time_step,
+                        in_data->time_scale,
+                        &checkedOutParams[i]) == PF_Err_NONE)
+                {
+                    paramPtrs[i] = &checkedOutParams[i];
+                }
             }
         }
 
         const y2014::RenderContext ctx = BuildRenderContextFromParams(in_data, paramPtrs);
         ERR(RenderLayerWorlds(in_data, input_worldP, output_worldP, ctx));
 
-        for (int i = 1; i < PARAM_COUNT; ++i) {
-            if (paramPtrs[i]) {
-                ERR2(PF_checkin_param(in_data, paramPtrs[i]));
+        if (in_data->inter.checkin_param) {
+            for (int i = 1; i < PARAM_COUNT; ++i) {
+                if (paramPtrs[i]) {
+                    ERR2(in_data->inter.checkin_param(in_data->effect_ref, paramPtrs[i]));
+                }
             }
         }
     }
@@ -565,6 +604,9 @@ PF_Err PluginDataEntryFunction2(
     const char* inHostName,
     const char* inHostVersion)
 {
+    (void)inSPBasicSuitePtr;
+    (void)inHostName;
+    (void)inHostVersion;
     PF_Err result = PF_Err_INVALID_CALLBACK;
     if (inPluginDataCallBackPtr) {
         result = PF_REGISTER_EFFECT_EXT2(

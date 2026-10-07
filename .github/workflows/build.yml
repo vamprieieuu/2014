@@ -12,75 +12,105 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Inspect and Verify Adobe After Effects SDK
+      - name: Verify Supplied Adobe After Effects SDK Layout
         shell: pwsh
         run: |
-          Write-Host "Checking extern/AfterEffectsSDK..."
-          if (-not (Test-Path "extern/AfterEffectsSDK")) {
-            Write-Error "BLOCKER: extern/AfterEffectsSDK directory does not exist in the repository."
-            exit 1
+          $sdkRoot = "extern/AfterEffectsSDK/Examples"
+          if (-not (Test-Path $sdkRoot)) {
+            if (Test-Path "extern/AfterEffectsSDK/Headers") {
+              $sdkRoot = "extern/AfterEffectsSDK"
+            } else {
+              Write-Error "FATAL: extern/AfterEffectsSDK/Examples does not exist."
+              exit 1
+            }
           }
-          Get-ChildItem -Path "extern/AfterEffectsSDK" -Recurse -Depth 2 | Select-Object FullName
-          $aeHeader = Get-ChildItem -Path "extern/AfterEffectsSDK" -Filter "AE_Effect.h" -Recurse | Select-Object -First 1
-          $piplTool = Get-ChildItem -Path "extern/AfterEffectsSDK" -Filter "PiPLtool.exe" -Recurse | Select-Object -First 1
-          if (-not $aeHeader) {
-            Write-Error "BLOCKER: AE_Effect.h missing in extern/AfterEffectsSDK."
-            exit 1
-          }
-          if (-not $piplTool) {
-            Write-Error "BLOCKER: PiPLtool.exe missing in extern/AfterEffectsSDK."
-            exit 1
-          }
-          Write-Host "Verified SDK Header: $($aeHeader.FullName)"
-          Write-Host "Verified PiPLtool: $($piplTool.FullName)"
 
-      - name: Configure CMake (Visual Studio 2022 x64)
+          $headersDir   = Join-Path $sdkRoot "Headers"
+          $resourcesDir = Join-Path $sdkRoot "Resources"
+          $utilDir      = Join-Path $sdkRoot "Util"
+          $gpuUtilsDir  = Join-Path $sdkRoot "GPUUtils"
+          $aeEffectH    = Join-Path $headersDir "AE_Effect.h"
+          $piplTool     = Join-Path $resourcesDir "PiPLtool.exe"
+
+          Write-Host "=== Adobe After Effects SDK Paths ==="
+          Write-Host "SDK Root:      $sdkRoot"
+          Write-Host "Headers:       $headersDir"
+          Write-Host "Resources:     $resourcesDir"
+          Write-Host "Util:          $utilDir"
+          Write-Host "GPUUtils:      $gpuUtilsDir"
+          Write-Host "AE_Effect.h:   $aeEffectH"
+          Write-Host "PiPLtool.exe:  $piplTool"
+
+          if (-not (Test-Path $aeEffectH)) {
+            Write-Error "FATAL: Missing $aeEffectH"
+            exit 1
+          }
+          if (-not (Test-Path $piplTool)) {
+            Write-Error "FATAL: Missing $piplTool"
+            exit 1
+          }
+
+      - name: Configure CMake (Visual Studio 17 2022 x64)
         run: cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build Release Targets (2014_core, 2014_tests, 2014.aex)
-        run: cmake --build build --config Release
+      - name: Build Release x64 (2014_core, 2014_tests, 2014_aex)
+        run: cmake --build build --config Release --target 2014_core 2014_tests 2014_aex
 
       - name: Run Automated Engine Tests
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Validate 2014.aex Binary, Architecture, Exports, Dependencies & PiPL
+      - name: Validate 2014.aex PE x64 Binary, PiPL & Exports
         shell: pwsh
         run: |
           $aex = Get-ChildItem -Path "build" -Filter "2014.aex" -Recurse | Select-Object -First 1
           if (-not $aex) {
-            Write-Error "BUILD FAILED: 2014.aex was not produced."
+            Write-Error "FATAL: 2014.aex was NOT produced by the build!"
             exit 1
           }
-          Write-Host "Found 2014.aex at: $($aex.FullName) ($($aex.Length) bytes)"
-          if ($aex.Length -lt 10240) {
-            Write-Error "2014.aex is unexpectedly small or empty."
+
+          $piplRc = Join-Path "build" "2014_PiPL.rc"
+          if (-not (Test-Path $piplRc)) {
+            Write-Error "FATAL: PiPL resource file 2014_PiPL.rc was not generated!"
             exit 1
           }
+
+          Write-Host "=== 2014.aex Build Verification ==="
+          Write-Host "Exact Path: $($aex.FullName)"
+          Write-Host "File Size:  $($aex.Length) bytes"
+          Write-Host "PiPL RC:    $piplRc ($((Get-Item $piplRc).Length) bytes)"
+
+          # Verify MZ / PE signature and x64 machine type (0x8664) directly from bytes
+          $bytes = [System.IO.File]::ReadAllBytes($aex.FullName)
+          if ($bytes.Length -lt 4096 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+            Write-Error "FATAL: 2014.aex is not a valid Windows PE binary (missing MZ header)."
+            exit 1
+          }
+          $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3C)
+          $machine  = [System.BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          if ($machine -ne 0x8664) {
+            Write-Error ("FATAL: 2014.aex machine type is 0x{0:X4}, expected 0x8664 (x64)." -f $machine)
+            exit 1
+          }
+          Write-Host "PE Architecture Verified: Windows PE x64 (0x8664)"
 
           $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vcToolsDir = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          $dumpbin = Get-ChildItem -Path "$vcToolsDir\VC\Tools\MSVC" -Filter "dumpbin.exe" -Recurse | Where-Object { $_.FullName -match "Hostx64\\x64" } | Select-Object -First 1
+          if (Test-Path $vsWhere) {
+            $vcToolsDir = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+            $dumpbin = Get-ChildItem -Path "$vcToolsDir\VC\Tools\MSVC" -Filter "dumpbin.exe" -Recurse | Where-Object { $_.FullName -match "Hostx64\\x64" } | Select-Object -First 1
+            if ($dumpbin) {
+              $exports = & $dumpbin.FullName /exports $aex.FullName | Out-String
+              Write-Host $exports
+              if (-not ($exports -match "EffectMain")) {
+                Write-Error "FATAL: EffectMain is not exported by 2014.aex!"
+                exit 1
+              }
 
-          if ($dumpbin) {
-            $headers = & $dumpbin.FullName /headers $aex.FullName
-            Write-Host ($headers | Out-String)
-            if (-not ($headers -match "8664 machine \(x64\)")) {
-              Write-Error "Invalid architecture: 2014.aex is not x64 (8664)."
-              exit 1
-            }
-
-            $exports = & $dumpbin.FullName /exports $aex.FullName
-            Write-Host ($exports | Out-String)
-            if (-not ($exports -match "EffectMain")) {
-              Write-Error "Missing required EffectMain export in 2014.aex."
-              exit 1
-            }
-
-            $deps = & $dumpbin.FullName /dependents $aex.FullName
-            Write-Host ($deps | Out-String)
-            if ($deps -match "MSVCP140D\.dll|VCRUNTIME140D\.dll|ucrtbased\.dll") {
-              Write-Error "Debug CRT dependency detected in Release build!"
-              exit 1
+              $deps = & $dumpbin.FullName /dependents $aex.FullName | Out-String
+              Write-Host $deps
+              if ($deps -match "MSVCP140D\.dll|VCRUNTIME140D\.dll|ucrtbased\.dll") {
+                Write-Error "FATAL: Debug CRT dependency found in Release 2014.aex!"
+                exit 1
+              }
             }
           }
 
