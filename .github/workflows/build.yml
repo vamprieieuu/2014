@@ -1,14 +1,95 @@
-name: Build 2014
+name: Build 2014 After Effects Plug-in (Windows x64)
+
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
 jobs:
-  windows:
-    runs-on: windows-latest
+  build-windows-x64:
+    runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
-      - name: Configure
-        run: cmake -S . -B build -A x64
-      - name: Build core
-        run: cmake --build build --config Release --parallel
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Inspect and Verify Adobe After Effects SDK
+        shell: pwsh
+        run: |
+          Write-Host "Checking extern/AfterEffectsSDK..."
+          if (-not (Test-Path "extern/AfterEffectsSDK")) {
+            Write-Error "BLOCKER: extern/AfterEffectsSDK directory does not exist in the repository."
+            exit 1
+          }
+          Get-ChildItem -Path "extern/AfterEffectsSDK" -Recurse -Depth 2 | Select-Object FullName
+          $aeHeader = Get-ChildItem -Path "extern/AfterEffectsSDK" -Filter "AE_Effect.h" -Recurse | Select-Object -First 1
+          $piplTool = Get-ChildItem -Path "extern/AfterEffectsSDK" -Filter "PiPLtool.exe" -Recurse | Select-Object -First 1
+          if (-not $aeHeader) {
+            Write-Error "BLOCKER: AE_Effect.h missing in extern/AfterEffectsSDK."
+            exit 1
+          }
+          if (-not $piplTool) {
+            Write-Error "BLOCKER: PiPLtool.exe missing in extern/AfterEffectsSDK."
+            exit 1
+          }
+          Write-Host "Verified SDK Header: $($aeHeader.FullName)"
+          Write-Host "Verified PiPLtool: $($piplTool.FullName)"
+
+      - name: Configure CMake (Visual Studio 2022 x64)
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Release Targets (2014_core, 2014_tests, 2014.aex)
+        run: cmake --build build --config Release
+
+      - name: Run Automated Engine Tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Validate 2014.aex Binary, Architecture, Exports, Dependencies & PiPL
+        shell: pwsh
+        run: |
+          $aex = Get-ChildItem -Path "build" -Filter "2014.aex" -Recurse | Select-Object -First 1
+          if (-not $aex) {
+            Write-Error "BUILD FAILED: 2014.aex was not produced."
+            exit 1
+          }
+          Write-Host "Found 2014.aex at: $($aex.FullName) ($($aex.Length) bytes)"
+          if ($aex.Length -lt 10240) {
+            Write-Error "2014.aex is unexpectedly small or empty."
+            exit 1
+          }
+
+          $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vcToolsDir = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $dumpbin = Get-ChildItem -Path "$vcToolsDir\VC\Tools\MSVC" -Filter "dumpbin.exe" -Recurse | Where-Object { $_.FullName -match "Hostx64\\x64" } | Select-Object -First 1
+
+          if ($dumpbin) {
+            $headers = & $dumpbin.FullName /headers $aex.FullName
+            Write-Host ($headers | Out-String)
+            if (-not ($headers -match "8664 machine \(x64\)")) {
+              Write-Error "Invalid architecture: 2014.aex is not x64 (8664)."
+              exit 1
+            }
+
+            $exports = & $dumpbin.FullName /exports $aex.FullName
+            Write-Host ($exports | Out-String)
+            if (-not ($exports -match "EffectMain")) {
+              Write-Error "Missing required EffectMain export in 2014.aex."
+              exit 1
+            }
+
+            $deps = & $dumpbin.FullName /dependents $aex.FullName
+            Write-Host ($deps | Out-String)
+            if ($deps -match "MSVCP140D\.dll|VCRUNTIME140D\.dll|ucrtbased\.dll") {
+              Write-Error "Debug CRT dependency detected in Release build!"
+              exit 1
+            }
+          }
+
+          New-Item -ItemType Directory -Force -Path "artifact_staging" | Out-Null
+          Copy-Item $aex.FullName -Destination "artifact_staging/2014.aex"
+
+      - name: Upload 2014-aex-windows-x64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 2014-aex-windows-x64
+          path: artifact_staging/2014.aex
+          if-no-files-found: error
