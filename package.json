@@ -1,0 +1,16 @@
+{
+  "name": "2014-ae-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Native Adobe After Effects 23.2.1 (Windows x64) plug-in and interactive studio emulating 2012-2017 iPhone camera pipelines, 2014 city filters, and procedural sensor grain.",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "build": "node build-check.mjs",
+    "lint": "node --check server.mjs && node --check build-check.mjs",
+    "test": "ctest --test-dir build -C Release --output-on-failure"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
