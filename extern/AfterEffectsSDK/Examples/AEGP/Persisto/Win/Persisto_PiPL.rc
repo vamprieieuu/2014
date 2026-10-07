@@ -67,7 +67,7 @@ BEGIN
             VALUE "FileDescription", "Persisto\0"
             VALUE "FileVersion", "1, 0, 0, 1\0"
             VALUE "InternalName", "Persisto\0"
-            VALUE "LegalCopyright", "Copyright © 2001\0"
+            VALUE "LegalCopyright", "Copyright ï¿½ 2001\0"
             VALUE "LegalTrademarks", "\0"
             VALUE "OriginalFilename", "Persisto.aex\0"
             VALUE "PrivateBuild", "\0"
